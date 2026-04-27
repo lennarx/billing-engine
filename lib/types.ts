@@ -27,6 +27,16 @@ export type DocumentType = 'traslado' | 'estudio' | 'consulta' | 'otro'
 export type ValidationStatus = 'pending' | 'ok' | 'observed'
 
 // ---------------------------------------------------------------------------
+// Numeric type
+//
+// Supabase/PostgREST returns numeric(12,2) columns as strings by default.
+// Use DbNumeric for all columns that map to numeric(12,2) in the schema.
+// Parse to number (e.g. parseFloat) when arithmetic is needed in the UI.
+// ---------------------------------------------------------------------------
+
+export type DbNumeric = string
+
+// ---------------------------------------------------------------------------
 // Entities
 // ---------------------------------------------------------------------------
 
@@ -44,7 +54,7 @@ export interface Invoice {
   invoice_number: string
   invoice_date: string | null
   status: InvoiceStatus
-  total_amount: number | null
+  total_amount: DbNumeric | null
   file_path: string | null
   notes: string | null
   created_at: string
@@ -62,7 +72,7 @@ export interface InvoicePractice {
   name: string
   unit_type: UnitType
   /** Value assigned to this practice for this invoice only. */
-  nomenclator_value: number
+  nomenclator_value: DbNumeric
   requires_documentation: boolean
   notes: string | null
   created_at: string
@@ -81,9 +91,9 @@ export interface InvoiceItem {
   dni: string
   affiliate_number: string | null
   service_date: string | null
-  quantity: number
-  billed_amount: number
-  expected_amount: number
+  quantity: DbNumeric
+  billed_amount: DbNumeric
+  expected_amount: DbNumeric
   coverage_status: CoverageStatus
   documentation_status: DocumentationStatus
   final_status: FinalStatus
@@ -103,7 +113,7 @@ export interface ItemDocument {
   file_path: string | null
   origin: string | null
   destination: string | null
-  kilometers: number | null
+  kilometers: DbNumeric | null
   document_date: string | null
   validation_status: ValidationStatus
   notes: string | null

@@ -2,6 +2,8 @@
 -- Billing Engine — Initial Schema
 -- =============================================================================
 
+create extension if not exists pgcrypto;
+
 -- ---------------------------------------------------------------------------
 -- providers
 -- ---------------------------------------------------------------------------
@@ -112,6 +114,9 @@ create table item_documents (
   constraint item_documents_document_type_check check (
     document_type in ('traslado', 'estudio', 'consulta', 'otro')
   ),
+  constraint item_documents_kilometers_check check (
+    kilometers is null or kilometers >= 0
+  ),
   constraint item_documents_validation_status_check check (
     validation_status in ('pending', 'ok', 'observed')
   )
@@ -140,11 +145,11 @@ $$;
 
 create trigger invoices_set_updated_at
   before update on invoices
-  for each row execute procedure set_updated_at();
+  for each row execute function set_updated_at();
 
 create trigger invoice_items_set_updated_at
   before update on invoice_items
-  for each row execute procedure set_updated_at();
+  for each row execute function set_updated_at();
 
 -- =============================================================================
 -- Seed data (commented out — uncomment to load example data)

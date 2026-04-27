@@ -117,5 +117,5 @@ Stored as a column for auditability rather than computed on read.
 
 ## Manual validations
 
-1. **Affiliate number lookup** — the user looks up the affiliate number from an external system and records it in `invoice_item.affiliate_number`.
-2. **Coverage status check** — the user manually marks each item's `coverage_status` as `active`, `inactive`, or `pending`.
+1. **Affiliate number lookup** — the user looks up the affiliate number from an external system and records it in `invoice_items.affiliate_number`.
+2. **Coverage status check** — the user manually marks each item's `invoice_items.coverage_status` as `active`, `inactive`, or `pending`.
