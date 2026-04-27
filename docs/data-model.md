@@ -2,83 +2,120 @@
 
 ## Entities
 
+### Provider
+
+A hospital or medical provider that issues invoices.
+
+| Column     | Type        | Notes                                  |
+|------------|-------------|----------------------------------------|
+| id         | uuid        | Primary key                            |
+| name       | text        | Provider name                          |
+| cuit       | text?       | Tax ID (optional)                      |
+| notes      | text?       | Free-text notes                        |
+| created_at | timestamptz |                                        |
+
+---
+
 ### Invoice
 
-Represents a billing document received from a provider.
+A billing document received from a provider.
 
-| Column          | Type      | Notes                                        |
-|-----------------|-----------|----------------------------------------------|
-| id              | uuid / text | Primary key                                |
-| provider_name   | text      | Name of the hospital or provider             |
-| invoice_number  | text      | Provider-assigned invoice number             |
-| invoice_date    | date      | Date on the invoice                          |
-| total_amount    | numeric   | Amount billed by the provider                |
-| status          | text      | `pending` \| `validated` \| `rejected`       |
-| file_url        | text?     | URL of the uploaded PDF/image in Supabase Storage |
-| created_at      | timestamp |                                              |
-
----
-
-### Practice
-
-A medical service listed on an invoice. Nomenclator values are **per-practice per-invoice** — not global.
-
-| Column             | Type    | Notes                                          |
-|--------------------|---------|------------------------------------------------|
-| id                 | uuid    | Primary key                                    |
-| invoice_id         | uuid    | FK → Invoice                                   |
-| name               | text    | Service name (e.g., "Ergometría", "Traslado")  |
-| nomenclator_value  | numeric | Value assigned to this practice on this invoice |
-| unit               | text    | e.g., "per session", "per km"                  |
-| created_at         | timestamp |                                              |
-
-> **Domain rule**: The same practice name can appear on multiple invoices with different nomenclator values. Do not treat nomenclator values as a global catalogue.
+| Column         | Type          | Notes                                                                 |
+|----------------|---------------|-----------------------------------------------------------------------|
+| id             | uuid          | Primary key                                                           |
+| provider_id    | uuid          | FK → Provider                                                         |
+| invoice_number | text          | Provider-assigned invoice number (unique per provider)                |
+| invoice_date   | date?         | Date on the invoice                                                   |
+| status         | text          | `draft` \| `in_review` \| `validated` \| `observed` \| `rejected`    |
+| total_amount   | numeric(12,2)?| Amount billed by the provider                                         |
+| file_path      | text?         | Path of the uploaded PDF/image in Supabase Storage                    |
+| notes          | text?         | Free-text notes                                                       |
+| created_at     | timestamptz   |                                                                       |
+| updated_at     | timestamptz   | Auto-updated on every write                                           |
 
 ---
 
-### AffiliateItem
+### Invoice Practice
 
-One service rendered to one affiliate (patient), referencing a practice on the same invoice.
+A medical service listed on a specific invoice. Nomenclator values are **per-practice per-invoice** — not global.
 
-| Column           | Type    | Notes                                                  |
-|------------------|---------|--------------------------------------------------------|
-| id               | uuid    | Primary key                                            |
-| invoice_id       | uuid    | FK → Invoice                                           |
-| practice_id      | uuid    | FK → Practice (must belong to the same invoice)        |
-| affiliate_name   | text    | Patient / affiliate name                               |
-| quantity         | numeric | Number of sessions, km, etc.                           |
-| expected_amount  | numeric | Computed: `quantity × practice.nomenclator_value`      |
-| coverage_status  | text    | `covered` \| `not_covered` \| `partial`                |
-| notes            | text    | Free-text notes from manual validation                 |
-| created_at       | timestamp |                                                      |
+| Column                  | Type          | Notes                                                    |
+|-------------------------|---------------|----------------------------------------------------------|
+| id                      | uuid          | Primary key                                              |
+| invoice_id              | uuid          | FK → Invoice (cascades on delete)                        |
+| code                    | text?         | Optional service code                                    |
+| name                    | text          | Service name (e.g., "Ergometría", "Traslado")            |
+| unit_type               | text          | `fixed` \| `unit` \| `km`                               |
+| nomenclator_value       | numeric(12,2) | Value assigned to this practice **for this invoice only**|
+| requires_documentation  | boolean       | Whether supporting docs are mandatory                    |
+| notes                   | text?         | Free-text notes                                          |
+| created_at              | timestamptz   |                                                          |
+
+> **Domain rule**: The same practice name (e.g., "Ergometría") can appear on multiple invoices with different `nomenclator_value`s. Do not treat nomenclator values as a global catalogue.
 
 ---
 
-### Document
+### Invoice Item
 
-A supporting file attached to an invoice (stored in Supabase Storage).
+One service performed for one affiliate (patient), referencing an Invoice Practice on the same invoice.
 
-| Column     | Type      | Notes                      |
-|------------|-----------|----------------------------|
-| id         | uuid      | Primary key                |
-| invoice_id | uuid      | FK → Invoice               |
-| file_url   | text      | Supabase Storage URL       |
-| label      | text      | Short description           |
-| created_at | timestamp |                            |
+| Column               | Type          | Notes                                                        |
+|----------------------|---------------|--------------------------------------------------------------|
+| id                   | uuid          | Primary key                                                  |
+| invoice_id           | uuid          | FK → Invoice (cascades on delete)                            |
+| invoice_practice_id  | uuid          | FK → Invoice Practice                                        |
+| dni                  | text          | Patient national ID                                          |
+| affiliate_number     | text?         | Affiliate / plan number (looked up manually)                 |
+| service_date         | date?         | Date the service was rendered                                |
+| quantity             | numeric(12,2) | Units, sessions, km, etc. (≥ 0)                             |
+| billed_amount        | numeric(12,2) | Amount billed by the provider (≥ 0)                         |
+| expected_amount      | numeric(12,2) | `quantity × invoice_practice.nomenclator_value` (≥ 0)       |
+| coverage_status      | text          | `pending` \| `active` \| `inactive` — set by manual lookup  |
+| documentation_status | text          | `pending` \| `ok` \| `observed` \| `not_required`           |
+| final_status         | text          | `pending` \| `approved` \| `observed` \| `rejected`         |
+| notes                | text?         | Free-text notes                                              |
+| created_at           | timestamptz   |                                                              |
+| updated_at           | timestamptz   | Auto-updated on every write                                  |
+
+---
+
+### Item Document
+
+Supporting documentation attached to one Invoice Item (stored in Supabase Storage).
+
+| Column           | Type          | Notes                                                  |
+|------------------|---------------|--------------------------------------------------------|
+| id               | uuid          | Primary key                                            |
+| invoice_item_id  | uuid          | FK → Invoice Item (cascades on delete)                 |
+| document_type    | text          | `traslado` \| `estudio` \| `consulta` \| `otro`        |
+| file_path        | text?         | Path in Supabase Storage                               |
+| origin           | text?         | Transfer origin (traslado only)                        |
+| destination      | text?         | Transfer destination (traslado only)                   |
+| kilometers       | numeric(12,2)?| Distance (traslado only)                               |
+| document_date    | date?         | Date on the document                                   |
+| validation_status| text          | `pending` \| `ok` \| `observed`                        |
+| notes            | text?         | Free-text notes                                        |
+| created_at       | timestamptz   |                                                        |
 
 ---
 
 ## Relationships
 
 ```
-Invoice 1 ──< Practice    (one invoice has many practices)
-Invoice 1 ──< AffiliateItem
-Invoice 1 ──< Document
-Practice  1 ──< AffiliateItem  (one practice referenced by many items)
+Provider        1 ──< Invoice
+Invoice         1 ──< InvoicePractice
+Invoice         1 ──< InvoiceItem
+InvoicePractice 1 ──< InvoiceItem      (one practice referenced by many items)
+InvoiceItem     1 ──< ItemDocument
 ```
 
 ## Computed fields
 
-`AffiliateItem.expected_amount = quantity × practice.nomenclator_value`
+`InvoiceItem.expected_amount = quantity × invoice_practice.nomenclator_value`
 
-This can be stored as a column (for auditability) or computed on read.
+Stored as a column for auditability rather than computed on read.
+
+## Manual validations
+
+1. **Affiliate number lookup** — the user looks up the affiliate number from an external system and records it in `invoice_items.affiliate_number`.
+2. **Coverage status check** — the user manually marks each item's `invoice_items.coverage_status` as `active`, `inactive`, or `pending`.
