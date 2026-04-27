@@ -141,7 +141,7 @@ export default function InvoiceDetailPage({ params }: { params: { id: string } }
                     <td className="px-4 py-2 text-sm text-gray-900 font-medium">
                       ${item.expected_amount.toLocaleString()}
                       <span className="text-xs text-gray-400 ml-1">
-                        ({item.quantity} × ${practice?.nomenclator_value.toLocaleString()})
+                        ({item.quantity} × ${practice?.nomenclator_value?.toLocaleString() ?? '—'})
                       </span>
                     </td>
                     <td className="px-4 py-2">
