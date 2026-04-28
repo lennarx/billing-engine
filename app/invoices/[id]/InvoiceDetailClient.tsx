@@ -7,6 +7,7 @@ import { getInvoiceById, updateInvoice, InvoiceWithProvider } from '@/lib/invoic
 import { uploadInvoiceFile, getInvoiceFileUrl } from '@/lib/storage'
 import { Provider, InvoiceStatus } from '@/lib/types'
 import InvoicePracticesSection from './InvoicePracticesSection'
+import InvoiceItemsSection from './InvoiceItemsSection'
 
 const STATUS_OPTIONS: InvoiceStatus[] = ['draft', 'in_review', 'validated', 'observed', 'rejected']
 
@@ -332,6 +333,9 @@ export default function InvoiceDetailClient({ id }: { id: string }) {
 
       {/* Invoice Practices */}
       <InvoicePracticesSection invoiceId={id} />
+
+      {/* Invoice Items */}
+      <InvoiceItemsSection invoiceId={id} />
     </div>
   )
 }
