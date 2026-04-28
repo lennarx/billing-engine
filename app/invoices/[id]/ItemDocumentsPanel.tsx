@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
   getItemDocuments,
   createItemDocument,
@@ -9,7 +9,7 @@ import {
   CreateItemDocumentInput,
   UpdateItemDocumentInput,
 } from '@/lib/item-documents'
-import { uploadItemDocumentFile, getItemDocumentFileUrl } from '@/lib/storage'
+import { uploadItemDocumentFile, getItemDocumentFileUrl, deleteItemDocumentFile } from '@/lib/storage'
 import { ItemDocument, DocumentType, ValidationStatus } from '@/lib/types'
 
 // ---------------------------------------------------------------------------
@@ -305,7 +305,17 @@ export default function ItemDocumentsPanel({ invoiceItemId }: ItemDocumentsPanel
         file_path: filePath,
       }
 
-      const created = await createItemDocument(input)
+      let created
+      try {
+        created = await createItemDocument(input)
+      } catch (dbErr) {
+        // Clean up the uploaded file so it doesn't become orphaned
+        if (filePath) {
+          await deleteItemDocumentFile(filePath).catch(() => undefined)
+        }
+        throw dbErr
+      }
+
       setDocuments((prev) => [...prev, created])
       setShowCreateForm(false)
     } catch (err) {
@@ -320,8 +330,9 @@ export default function ItemDocumentsPanel({ invoiceItemId }: ItemDocumentsPanel
     setEditError(null)
     try {
       const existing = documents.find((d) => d.id === id)
+      const oldFilePath = existing?.file_path ?? null
 
-      let filePath = existing?.file_path ?? null
+      let filePath = oldFilePath
       if (file) {
         filePath = await uploadItemDocumentFile(file, invoiceItemId)
       }
@@ -337,7 +348,22 @@ export default function ItemDocumentsPanel({ invoiceItemId }: ItemDocumentsPanel
         file_path: filePath,
       }
 
-      const updated = await updateItemDocument(id, input)
+      let updated
+      try {
+        updated = await updateItemDocument(id, input)
+      } catch (dbErr) {
+        // Clean up the newly uploaded file if the DB update failed
+        if (file && filePath && filePath !== oldFilePath) {
+          await deleteItemDocumentFile(filePath).catch(() => undefined)
+        }
+        throw dbErr
+      }
+
+      // Delete the old storage file now that the DB row points to the new one
+      if (file && oldFilePath && oldFilePath !== filePath) {
+        await deleteItemDocumentFile(oldFilePath).catch(() => undefined)
+      }
+
       setDocuments((prev) => prev.map((d) => (d.id === id ? updated : d)))
       setEditingId(null)
     } catch (err) {
@@ -352,7 +378,13 @@ export default function ItemDocumentsPanel({ invoiceItemId }: ItemDocumentsPanel
     setDeletingId(id)
     setDeleteError((prev) => ({ ...prev, [id]: '' }))
     try {
+      const doc = documents.find((d) => d.id === id)
       await deleteItemDocument(id)
+      // Best-effort: remove the storage file. If this fails the row is already
+      // gone so we still update the UI — the orphaned file can be cleaned up manually.
+      if (doc?.file_path) {
+        await deleteItemDocumentFile(doc.file_path).catch(() => undefined)
+      }
       setDocuments((prev) => prev.filter((d) => d.id !== id))
     } catch (err) {
       setDeleteError((prev) => ({
@@ -421,7 +453,7 @@ export default function ItemDocumentsPanel({ invoiceItemId }: ItemDocumentsPanel
                             </span> km
                           </span>
                         )}
-                        {(!doc.origin || !doc.destination || !doc.kilometers || parseFloat(doc.kilometers ?? '0') <= 0) && (
+                        {(!doc.origin || !doc.destination || !doc.kilometers || isNaN(parseFloat(doc.kilometers)) || parseFloat(doc.kilometers) <= 0) && (
                           <span className="text-amber-700">⚠ Missing traslado fields</span>
                         )}
                       </div>

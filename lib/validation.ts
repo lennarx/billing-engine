@@ -84,15 +84,22 @@ function deriveDocumentationStatus(
   // Rule 4: required but no documents
   if (documents.length === 0) return 'pending'
 
-  // Rule 5 & 6: check each document; any observed → documentation observed
+  // Rule 5 & 6: any observed document (by persisted status or traslado field check) keeps
+  // documentation observed. If nothing is observed but at least one document is still pending,
+  // aggregate status remains pending.
   const anyObserved = documents.some((doc) => {
+    if (doc.validation_status === 'observed') return true
     if (doc.document_type === 'traslado') {
       return isTrasladoInvalid(doc)
     }
     return false
   })
 
-  return anyObserved ? 'observed' : 'ok'
+  if (anyObserved) return 'observed'
+
+  const anyPending = documents.some((doc) => doc.validation_status === 'pending')
+
+  return anyPending ? 'pending' : 'ok'
 }
 
 function buildDocumentUpdates(documents: ItemDocument[]): DocumentValidationUpdate[] {
@@ -103,7 +110,7 @@ function buildDocumentUpdates(documents: ItemDocument[]): DocumentValidationUpda
         validation_status: isTrasladoInvalid(doc) ? 'observed' : 'ok',
       }
     }
-    // Non-traslado documents keep their existing status (or ok if not traslado)
+    // Non-traslado documents keep their existing validation status.
     return { id: doc.id, validation_status: doc.validation_status }
   })
 }

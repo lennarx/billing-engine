@@ -46,3 +46,8 @@ export function getItemDocumentFileUrl(filePath: string): string {
   const { data } = supabase.storage.from(DOCUMENTS_BUCKET).getPublicUrl(filePath)
   return data.publicUrl
 }
+
+export async function deleteItemDocumentFile(filePath: string): Promise<void> {
+  const { error } = await supabase.storage.from(DOCUMENTS_BUCKET).remove([filePath])
+  if (error) throw error
+}
