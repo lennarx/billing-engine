@@ -47,7 +47,7 @@ export default function InvoiceDetailClient({ id }: { id: string }) {
       }
       setInvoice(inv)
       setProviders(prov ?? [])
-    }).catch(() => setLoadError('Failed to load invoice.'))
+    }).catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load invoice.'))
   }, [id])
 
   function startEditing() {

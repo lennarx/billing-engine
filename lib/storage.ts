@@ -4,7 +4,8 @@ const BUCKET =
   process.env.NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET_INVOICES ?? 'invoice-files'
 
 export async function uploadInvoiceFile(file: File, invoiceId: string): Promise<string> {
-  const ext = file.name.split('.').pop()
+  const nameParts = file.name.split('.')
+  const ext = nameParts.length > 1 ? nameParts.pop() : 'bin'
   const path = `${invoiceId}/${Date.now()}.${ext}`
 
   const { error } = await supabase.storage.from(BUCKET).upload(path, file)

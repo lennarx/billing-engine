@@ -4,10 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { createInvoice } from '@/lib/invoices'
+import { createInvoice, updateInvoice } from '@/lib/invoices'
 import { uploadInvoiceFile } from '@/lib/storage'
-import { Provider } from '@/lib/types'
-import { InvoiceStatus } from '@/lib/types'
+import { Provider, InvoiceStatus } from '@/lib/types'
 
 const STATUS_OPTIONS: InvoiceStatus[] = ['draft', 'in_review', 'validated', 'observed', 'rejected']
 
@@ -60,9 +59,7 @@ export default function NewInvoicePage() {
 
       if (file) {
         const filePath = await uploadInvoiceFile(file, invoice.id)
-        await import('@/lib/invoices').then(({ updateInvoice }) =>
-          updateInvoice(invoice.id, { file_path: filePath }),
-        )
+        await updateInvoice(invoice.id, { file_path: filePath })
       }
 
       router.push(`/invoices/${invoice.id}`)
