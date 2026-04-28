@@ -315,7 +315,7 @@ export default function InvoicePracticesSection({ invoiceId }: { invoiceId: stri
 
       {!loading && !loadError && practices.length === 0 && !showCreateForm && (
         <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-400">
-          <p className="text-sm">No practices loaded for this invoice yet.</p>
+          <p className="text-sm">No practices added for this invoice yet.</p>
         </div>
       )}
 
