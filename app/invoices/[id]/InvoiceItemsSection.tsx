@@ -164,20 +164,38 @@ function ItemForm({
   const [form, setForm] = useState<ItemFormState>(initialValues)
   const [affiliateSuggested, setAffiliateSuggested] = useState(false)
 
+  // Sync form when initialValues changes (e.g. when a Duplicate action updates the pre-fill)
+  useEffect(() => {
+    setForm(initialValues)
+    setAffiliateSuggested(false)
+  }, [initialValues])
+
   function set<K extends keyof ItemFormState>(key: K, value: ItemFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
   function handleDniChange(dni: string) {
+    const trimmedDni = dni.trim()
+    // Auto-fill affiliate_number if blank and a previous entry exists for this DNI.
+    // Use a backwards loop for broad browser compatibility (Array.findLast is ES2023).
+    let match: InvoiceItemWithPractice | undefined
+    for (let idx = allItems.length - 1; idx >= 0; idx -= 1) {
+      const item = allItems[idx]
+      if (item.dni === trimmedDni && item.affiliate_number) {
+        match = item
+        break
+      }
+    }
     setForm((prev) => {
       const next = { ...prev, dni }
-      // Auto-fill affiliate_number if blank and a previous entry exists for this DNI
-      if (!prev.affiliate_number) {
-        const match = allItems.findLast((i) => i.dni === dni.trim() && i.affiliate_number)
+      if (!prev.affiliate_number || affiliateSuggested) {
         if (match?.affiliate_number) {
           setAffiliateSuggested(true)
           return { ...next, affiliate_number: match.affiliate_number }
         }
+        // No match found — clear any previously auto-filled value
+        setAffiliateSuggested(false)
+        return { ...next, affiliate_number: affiliateSuggested ? '' : prev.affiliate_number }
       }
       setAffiliateSuggested(false)
       return next
@@ -543,7 +561,7 @@ export default function InvoiceItemsSection({
       observedDocs: items.filter((i) => i.documentation_status === 'observed').length,
       totalBilled,
       totalExpected,
-      difference: totalBilled - totalExpected,
+      difference: Math.round((totalBilled - totalExpected) * 100) / 100,
     }
   }, [items])
 
@@ -804,7 +822,7 @@ export default function InvoiceItemsSection({
           </div>
 
           {/* Issue flags */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             <div className="border border-red-200 rounded-md px-3 py-2 text-center bg-red-50">
               <div className="text-lg font-bold text-red-700">{summary.inactiveCoverage}</div>
               <div className="text-xs text-red-600 mt-0.5">Inactive coverage</div>
@@ -816,6 +834,10 @@ export default function InvoiceItemsSection({
             <div className="border border-gray-200 rounded-md px-3 py-2 text-center bg-gray-50">
               <div className="text-lg font-bold text-gray-700">{summary.pendingDocs}</div>
               <div className="text-xs text-gray-500 mt-0.5">Pending docs</div>
+            </div>
+            <div className="border border-orange-200 rounded-md px-3 py-2 text-center bg-orange-50">
+              <div className="text-lg font-bold text-orange-700">{summary.observedDocs}</div>
+              <div className="text-xs text-orange-600 mt-0.5">Observed docs</div>
             </div>
           </div>
 

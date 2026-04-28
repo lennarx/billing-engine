@@ -123,7 +123,7 @@ Each item row has a **Duplicate** button that pre-fills the "Add Item" form with
 ### Affiliate number suggestion
 When creating or editing an item, if a DNI is entered that matches a previous item with an affiliate number in the current invoice, the affiliate number field is auto-filled. A hint label is shown, and the user can override the value at any time.
 
-
+## Item Documents & Validation
 
 Each invoice item can have supporting documents attached (e.g. transfer receipts, study results, consultation records). Documents are uploaded and reviewed **manually** — there is no OCR.
 
