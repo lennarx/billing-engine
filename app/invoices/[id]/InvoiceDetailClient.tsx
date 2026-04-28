@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { getInvoiceById, updateInvoice, InvoiceWithProvider } from '@/lib/invoices'
 import { uploadInvoiceFile, getInvoiceFileUrl } from '@/lib/storage'
 import { Provider, InvoiceStatus } from '@/lib/types'
+import InvoicePracticesSection from './InvoicePracticesSection'
 
 const STATUS_OPTIONS: InvoiceStatus[] = ['draft', 'in_review', 'validated', 'observed', 'rejected']
 
@@ -120,7 +121,7 @@ export default function InvoiceDetailClient({ id }: { id: string }) {
     : false
 
   return (
-    <div className="space-y-8 max-w-3xl">
+    <div className="space-y-8 max-w-5xl">
       <Link href="/invoices" className="text-sm text-blue-600 hover:underline">
         ← Back to Invoices
       </Link>
@@ -328,6 +329,9 @@ export default function InvoiceDetailClient({ id }: { id: string }) {
           </div>
         )}
       </div>
+
+      {/* Invoice Practices */}
+      <InvoicePracticesSection invoiceId={id} />
     </div>
   )
 }
