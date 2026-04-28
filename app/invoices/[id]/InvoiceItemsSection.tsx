@@ -73,6 +73,9 @@ const FINAL_COLORS: Record<FinalStatus, string> = {
 // Form state
 // ---------------------------------------------------------------------------
 
+/** Shared Intl format options for currency amounts displayed in the summary. */
+const CURRENCY_FORMAT: Intl.NumberFormatOptions = { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+
 interface ItemFormState {
   dni: string
   affiliate_number: string
@@ -170,9 +173,7 @@ function ItemForm({
       const next = { ...prev, dni }
       // Auto-fill affiliate_number if blank and a previous entry exists for this DNI
       if (!prev.affiliate_number) {
-        const match = [...allItems]
-          .reverse()
-          .find((i) => i.dni === dni.trim() && i.affiliate_number)
+        const match = allItems.findLast((i) => i.dni === dni.trim() && i.affiliate_number)
         if (match?.affiliate_number) {
           setAffiliateSuggested(true)
           return { ...next, affiliate_number: match.affiliate_number }
@@ -520,7 +521,7 @@ export default function InvoiceItemsSection({
       if (filterCoverageStatus && item.coverage_status !== filterCoverageStatus) return false
       if (filterDocStatus && item.documentation_status !== filterDocStatus) return false
       if (filterMismatchOnly && !hasMismatch(item.billed_amount, item.expected_amount)) return false
-      if (filterDocIssuesOnly && item.documentation_status !== 'pending' && item.documentation_status !== 'observed') return false
+      if (filterDocIssuesOnly && !(['pending', 'observed'] as DocumentationStatus[]).includes(item.documentation_status)) return false
       return true
     })
   }, [items, filterDni, filterFinalStatus, filterCoverageStatus, filterDocStatus, filterMismatchOnly, filterDocIssuesOnly])
@@ -591,6 +592,7 @@ export default function InvoiceItemsSection({
     })
     setShowCreateForm(true)
     setCreateError(null)
+    // Allow the state update to flush before scrolling into view
     setTimeout(() => {
       createFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 50)
@@ -821,16 +823,16 @@ export default function InvoiceItemsSection({
           <div className="grid grid-cols-3 gap-2">
             <div className="border border-gray-200 rounded-md px-3 py-2 bg-gray-50">
               <div className="text-xs text-gray-500 mb-0.5">Total billed</div>
-              <div className="text-sm font-semibold text-gray-900">${summary.totalBilled.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div className="text-sm font-semibold text-gray-900">${summary.totalBilled.toLocaleString(undefined, CURRENCY_FORMAT)}</div>
             </div>
             <div className="border border-gray-200 rounded-md px-3 py-2 bg-gray-50">
               <div className="text-xs text-gray-500 mb-0.5">Total expected</div>
-              <div className="text-sm font-semibold text-gray-900">${summary.totalExpected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div className="text-sm font-semibold text-gray-900">${summary.totalExpected.toLocaleString(undefined, CURRENCY_FORMAT)}</div>
             </div>
             <div className={`border rounded-md px-3 py-2 ${summary.difference !== 0 ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
               <div className="text-xs text-gray-500 mb-0.5">Difference</div>
               <div className={`text-sm font-semibold ${summary.difference !== 0 ? 'text-amber-700' : 'text-gray-900'}`}>
-                {summary.difference >= 0 ? '+' : ''}${summary.difference.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {summary.difference >= 0 ? '+' : ''}${summary.difference.toLocaleString(undefined, CURRENCY_FORMAT)}
               </div>
             </div>
           </div>
