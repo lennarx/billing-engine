@@ -9,12 +9,15 @@ import {
   InvoiceItemWithPractice,
 } from '@/lib/invoice-items'
 import { getInvoicePractices } from '@/lib/invoice-practices'
+import { getItemDocuments, updateItemDocument } from '@/lib/item-documents'
+import { validateInvoiceItem } from '@/lib/validation'
 import {
   InvoicePractice,
   CoverageStatus,
   DocumentationStatus,
   FinalStatus,
 } from '@/lib/types'
+import ItemDocumentsPanel from './ItemDocumentsPanel'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -400,6 +403,11 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<Record<string, string>>({})
 
+  const [recalcId, setRecalcId] = useState<string | null>(null)
+  const [recalcError, setRecalcError] = useState<Record<string, string>>({})
+  const [recalcAllRunning, setRecalcAllRunning] = useState(false)
+  const [recalcAllError, setRecalcAllError] = useState<string | null>(null)
+
   useEffect(() => {
     let cancelled = false
 
@@ -533,26 +541,99 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
     }
   }
 
+  async function recalculateItem(item: InvoiceItemWithPractice): Promise<InvoiceItemWithPractice> {
+    const practice = item.invoice_practices
+    const documents = await getItemDocuments(item.id)
+    const result = validateInvoiceItem(item, practice, documents)
+
+    // Update each document whose validation_status changed
+    await Promise.all(
+      result.documentUpdates
+        .filter((u) => {
+          const doc = documents.find((d) => d.id === u.id)
+          return doc && doc.validation_status !== u.validation_status
+        })
+        .map((u) => updateItemDocument(u.id, { validation_status: u.validation_status })),
+    )
+
+    // Update the invoice item
+    const updated = await updateInvoiceItem(item.id, {
+      documentation_status: result.documentation_status,
+      final_status: result.final_status,
+    })
+
+    return updated
+  }
+
+  async function handleRecalculate(id: string) {
+    const item = items.find((i) => i.id === id)
+    if (!item) return
+    setRecalcId(id)
+    setRecalcError((prev) => ({ ...prev, [id]: '' }))
+    try {
+      const updated = await recalculateItem(item)
+      setItems((prev) => prev.map((i) => (i.id === id ? updated : i)))
+    } catch (err) {
+      setRecalcError((prev) => ({
+        ...prev,
+        [id]: err instanceof Error ? err.message : 'Failed to recalculate status.',
+      }))
+    } finally {
+      setRecalcId(null)
+    }
+  }
+
+  async function handleRecalculateAll() {
+    setRecalcAllRunning(true)
+    setRecalcAllError(null)
+    try {
+      const updatedItems = [...items]
+      for (let i = 0; i < updatedItems.length; i++) {
+        const updated = await recalculateItem(updatedItems[i])
+        updatedItems[i] = updated
+      }
+      setItems(updatedItems)
+    } catch (err) {
+      setRecalcAllError(err instanceof Error ? err.message : 'Failed to recalculate all items.')
+    } finally {
+      setRecalcAllRunning(false)
+    }
+  }
+
   const noPractices = !practicesLoading && practices.length === 0
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Invoice Items</h2>
-        {!showCreateForm && (
-          <button
-            onClick={() => {
-              setShowCreateForm(true)
-              setCreateError(null)
-            }}
-            disabled={noPractices}
-            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Add Item
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {items.length > 0 && (
+            <button
+              onClick={() => void handleRecalculateAll()}
+              disabled={recalcAllRunning}
+              className="px-3 py-1.5 border border-gray-300 text-sm rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              {recalcAllRunning ? 'Recalculating…' : 'Recalculate all item statuses'}
+            </button>
+          )}
+          {!showCreateForm && (
+            <button
+              onClick={() => {
+                setShowCreateForm(true)
+                setCreateError(null)
+              }}
+              disabled={noPractices}
+              className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Add Item
+            </button>
+          )}
+        </div>
       </div>
 
+      {recalcAllError && (
+        <p className="text-sm text-red-600 mb-4">{recalcAllError}</p>
+      )}
       {showCreateForm && (
         <div className="mb-4">
           <ItemForm
@@ -645,6 +726,18 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
                         </p>
                       )}
 
+                      {item.coverage_status === 'inactive' && (
+                        <p className="text-xs text-red-700">
+                          ⚠ Inactive coverage.
+                        </p>
+                      )}
+
+                      {item.documentation_status === 'pending' && item.invoice_practices.requires_documentation && (
+                        <p className="text-xs text-amber-700">
+                          ⚠ Documentation required but not yet attached.
+                        </p>
+                      )}
+
                       {/* Row 3: status badges */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${COVERAGE_COLORS[item.coverage_status]}`}>
@@ -665,9 +758,22 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
                       {deleteError[item.id] && (
                         <p className="text-xs text-red-600 mt-1">{deleteError[item.id]}</p>
                       )}
+
+                      {recalcError[item.id] && (
+                        <p className="text-xs text-red-600 mt-1">{recalcError[item.id]}</p>
+                      )}
+
+                      <ItemDocumentsPanel invoiceItemId={item.id} />
                     </div>
 
                     <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => void handleRecalculate(item.id)}
+                        disabled={recalcId === item.id || recalcAllRunning}
+                        className="text-sm text-gray-600 hover:underline disabled:opacity-50"
+                      >
+                        {recalcId === item.id ? 'Recalculating…' : 'Recalculate status'}
+                      </button>
                       <button
                         onClick={() => {
                           setEditingId(item.id)
