@@ -29,7 +29,13 @@ export default function NewInvoicePage() {
       .from('providers')
       .select('*')
       .order('name')
-      .then(({ data }) => setProviders(data ?? []))
+      .then(({ data, error }) => {
+        if (error) {
+          setError(error.message)
+          return
+        }
+        setProviders(data ?? [])
+      })
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {

@@ -16,7 +16,7 @@ export async function getProviderById(id: string): Promise<Provider | null> {
     .from('providers')
     .select('*')
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
   if (error) throw error
   return data

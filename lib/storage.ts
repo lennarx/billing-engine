@@ -14,6 +14,11 @@ export async function uploadInvoiceFile(file: File, invoiceId: string): Promise<
   return path
 }
 
+/**
+ * Returns the public URL for a stored invoice file.
+ * Requires the bucket to be configured as public in Supabase Storage.
+ * For production use with private buckets, switch to createSignedUrl().
+ */
 export function getInvoiceFileUrl(filePath: string): string {
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(filePath)
   return data.publicUrl

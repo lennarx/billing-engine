@@ -20,10 +20,10 @@ export async function getInvoiceById(id: string): Promise<InvoiceWithProvider | 
     .from('invoices')
     .select('*, providers(name)')
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
   if (error) throw error
-  return data as InvoiceWithProvider
+  return data as InvoiceWithProvider | null
 }
 
 export interface CreateInvoiceInput {

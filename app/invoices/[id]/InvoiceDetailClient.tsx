@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getInvoiceById, updateInvoice, InvoiceWithProvider } from '@/lib/invoices'
@@ -19,7 +18,6 @@ const statusColors: Record<string, string> = {
 }
 
 export default function InvoiceDetailClient({ id }: { id: string }) {
-  const router = useRouter()
   const [invoice, setInvoice] = useState<InvoiceWithProvider | null>(null)
   const [providers, setProviders] = useState<Provider[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -40,13 +38,14 @@ export default function InvoiceDetailClient({ id }: { id: string }) {
     Promise.all([
       getInvoiceById(id),
       supabase.from('providers').select('*').order('name'),
-    ]).then(([inv, { data: prov }]) => {
+    ]).then(([inv, providersResult]) => {
+      if (providersResult.error) throw providersResult.error
       if (!inv) {
         setLoadError('Invoice not found.')
         return
       }
       setInvoice(inv)
-      setProviders(prov ?? [])
+      setProviders(providersResult.data ?? [])
     }).catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load invoice.'))
   }, [id])
 

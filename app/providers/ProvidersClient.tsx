@@ -1,8 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import {
   createProvider,
   updateProvider,
@@ -15,7 +13,6 @@ export default function ProvidersClient({
 }: {
   initialProviders: Provider[]
 }) {
-  const router = useRouter()
   const [providers, setProviders] = useState<Provider[]>(initialProviders)
 
   // New provider form
