@@ -88,7 +88,42 @@ docs/
 AGENTS.md             # Guidance for AI agents working in this repo
 ```
 
-## Item Documents & Validation
+## Invoice Detail Features
+
+### Summary counters
+The invoice detail page shows a summary section above the item list with:
+- Item counts by final status (total, approved, observed, rejected, pending)
+- Issue flags: inactive coverage count, amount mismatch count, pending documentation count
+- Amount totals: total billed, total expected, and the difference between them
+
+### Filters
+The item list can be filtered client-side by:
+- **DNI** — text search
+- **Final status** — pending / approved / observed / rejected
+- **Coverage status** — pending / active / inactive
+- **Documentation status** — pending / ok / observed / not required
+- **Mismatch only** — items where billed ≠ expected
+- **Doc issues only** — items with pending or observed documentation
+
+A **Clear filters** button resets all filters. A "Showing X of Y items" counter is displayed when any filter is active.
+
+### Suggested invoice status
+Based on the current items, the section shows the recommended invoice status:
+- No items → `draft`
+- Any rejected item → `observed`
+- Any observed item → `observed`
+- Any pending item → `in_review`
+- All approved → `validated`
+
+An **Apply suggested status** button updates `invoices.status` with the suggested value. The invoice status is never changed automatically — the user must click the button.
+
+### Duplicate item
+Each item row has a **Duplicate** button that pre-fills the "Add Item" form with the item's values. The user can adjust the DNI and affiliate number before saving.
+
+### Affiliate number suggestion
+When creating or editing an item, if a DNI is entered that matches a previous item with an affiliate number in the current invoice, the affiliate number field is auto-filled. A hint label is shown, and the user can override the value at any time.
+
+
 
 Each invoice item can have supporting documents attached (e.g. transfer receipts, study results, consultation records). Documents are uploaded and reviewed **manually** — there is no OCR.
 

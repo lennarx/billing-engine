@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   getInvoiceItems,
   createInvoiceItem,
@@ -11,8 +11,10 @@ import {
 import { getInvoicePractices } from '@/lib/invoice-practices'
 import { getItemDocuments, updateItemDocument } from '@/lib/item-documents'
 import { validateInvoiceItem } from '@/lib/validation'
+import { updateInvoice } from '@/lib/invoices'
 import {
   InvoicePractice,
+  InvoiceStatus,
   CoverageStatus,
   DocumentationStatus,
   FinalStatus,
@@ -138,6 +140,7 @@ function practiceLabel(p: InvoicePractice): string {
 interface ItemFormProps {
   initialValues: ItemFormState
   practices: InvoicePractice[]
+  allItems: InvoiceItemWithPractice[]
   onSubmit: (values: ItemFormState) => Promise<void>
   onCancel: () => void
   submitLabel: string
@@ -148,6 +151,7 @@ interface ItemFormProps {
 function ItemForm({
   initialValues,
   practices,
+  allItems,
   onSubmit,
   onCancel,
   submitLabel,
@@ -155,9 +159,28 @@ function ItemForm({
   saving,
 }: ItemFormProps) {
   const [form, setForm] = useState<ItemFormState>(initialValues)
+  const [affiliateSuggested, setAffiliateSuggested] = useState(false)
 
   function set<K extends keyof ItemFormState>(key: K, value: ItemFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function handleDniChange(dni: string) {
+    setForm((prev) => {
+      const next = { ...prev, dni }
+      // Auto-fill affiliate_number if blank and a previous entry exists for this DNI
+      if (!prev.affiliate_number) {
+        const match = [...allItems]
+          .reverse()
+          .find((i) => i.dni === dni.trim() && i.affiliate_number)
+        if (match?.affiliate_number) {
+          setAffiliateSuggested(true)
+          return { ...next, affiliate_number: match.affiliate_number }
+        }
+      }
+      setAffiliateSuggested(false)
+      return next
+    })
   }
 
   const selectedPractice = practices.find((p) => p.id === form.invoice_practice_id) ?? null
@@ -198,7 +221,7 @@ function ItemForm({
           <input
             type="text"
             value={form.dni}
-            onChange={(e) => set('dni', e.target.value)}
+            onChange={(e) => handleDniChange(e.target.value)}
             required
             className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
@@ -208,10 +231,16 @@ function ItemForm({
           <input
             type="text"
             value={form.affiliate_number}
-            onChange={(e) => set('affiliate_number', e.target.value)}
+            onChange={(e) => {
+              setAffiliateSuggested(false)
+              set('affiliate_number', e.target.value)
+            }}
             placeholder="Optional"
             className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+          {affiliateSuggested && (
+            <p className="text-xs text-blue-600 mt-0.5">Auto-filled from previous entry</p>
+          )}
         </div>
       </div>
 
@@ -384,7 +413,13 @@ function ItemForm({
 // Main section component
 // ---------------------------------------------------------------------------
 
-export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }) {
+export default function InvoiceItemsSection({
+  invoiceId,
+  onStatusUpdated,
+}: {
+  invoiceId: string
+  onStatusUpdated?: (status: InvoiceStatus) => void
+}) {
   const [practices, setPractices] = useState<InvoicePractice[]>([])
   const [practicesLoading, setPracticesLoading] = useState(true)
 
@@ -392,9 +427,12 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  // Create form — supports pre-filling for duplicate action
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [createFormInitialValues, setCreateFormInitialValues] = useState<ItemFormState>(emptyForm)
   const [createSaving, setCreateSaving] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const createFormRef = useRef<HTMLDivElement>(null)
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
@@ -407,6 +445,17 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
   const [recalcError, setRecalcError] = useState<Record<string, string>>({})
   const [recalcAllRunning, setRecalcAllRunning] = useState(false)
   const [recalcAllError, setRecalcAllError] = useState<string | null>(null)
+
+  const [applyingStatus, setApplyingStatus] = useState(false)
+  const [applyStatusError, setApplyStatusError] = useState<string | null>(null)
+
+  // Filters
+  const [filterDni, setFilterDni] = useState('')
+  const [filterFinalStatus, setFilterFinalStatus] = useState<FinalStatus | ''>('')
+  const [filterCoverageStatus, setFilterCoverageStatus] = useState<CoverageStatus | ''>('')
+  const [filterDocStatus, setFilterDocStatus] = useState<DocumentationStatus | ''>('')
+  const [filterMismatchOnly, setFilterMismatchOnly] = useState(false)
+  const [filterDocIssuesOnly, setFilterDocIssuesOnly] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -460,6 +509,93 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
     }
   }, [invoiceId])
 
+  // ---------------------------------------------------------------------------
+  // Derived state
+  // ---------------------------------------------------------------------------
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (filterDni && !item.dni.toLowerCase().includes(filterDni.toLowerCase())) return false
+      if (filterFinalStatus && item.final_status !== filterFinalStatus) return false
+      if (filterCoverageStatus && item.coverage_status !== filterCoverageStatus) return false
+      if (filterDocStatus && item.documentation_status !== filterDocStatus) return false
+      if (filterMismatchOnly && !hasMismatch(item.billed_amount, item.expected_amount)) return false
+      if (filterDocIssuesOnly && item.documentation_status !== 'pending' && item.documentation_status !== 'observed') return false
+      return true
+    })
+  }, [items, filterDni, filterFinalStatus, filterCoverageStatus, filterDocStatus, filterMismatchOnly, filterDocIssuesOnly])
+
+  const hasActiveFilters = !!(filterDni || filterFinalStatus || filterCoverageStatus || filterDocStatus || filterMismatchOnly || filterDocIssuesOnly)
+
+  const summary = useMemo(() => {
+    const totalBilled = items.reduce((sum, i) => sum + parseFloat(i.billed_amount), 0)
+    const totalExpected = items.reduce((sum, i) => sum + parseFloat(i.expected_amount), 0)
+    return {
+      total: items.length,
+      approved: items.filter((i) => i.final_status === 'approved').length,
+      observed: items.filter((i) => i.final_status === 'observed').length,
+      rejected: items.filter((i) => i.final_status === 'rejected').length,
+      pending: items.filter((i) => i.final_status === 'pending').length,
+      inactiveCoverage: items.filter((i) => i.coverage_status === 'inactive').length,
+      amountMismatch: items.filter((i) => hasMismatch(i.billed_amount, i.expected_amount)).length,
+      pendingDocs: items.filter((i) => i.documentation_status === 'pending').length,
+      observedDocs: items.filter((i) => i.documentation_status === 'observed').length,
+      totalBilled,
+      totalExpected,
+      difference: totalBilled - totalExpected,
+    }
+  }, [items])
+
+  const suggestedStatus = useMemo((): InvoiceStatus => {
+    if (items.length === 0) return 'draft'
+    if (items.some((i) => i.final_status === 'rejected')) return 'observed'
+    if (items.some((i) => i.final_status === 'observed')) return 'observed'
+    if (items.some((i) => i.final_status === 'pending')) return 'in_review'
+    return 'validated'
+  }, [items])
+
+  function clearFilters() {
+    setFilterDni('')
+    setFilterFinalStatus('')
+    setFilterCoverageStatus('')
+    setFilterDocStatus('')
+    setFilterMismatchOnly(false)
+    setFilterDocIssuesOnly(false)
+  }
+
+  async function handleApplySuggestedStatus() {
+    setApplyingStatus(true)
+    setApplyStatusError(null)
+    try {
+      await updateInvoice(invoiceId, { status: suggestedStatus })
+      onStatusUpdated?.(suggestedStatus)
+    } catch (err) {
+      setApplyStatusError(err instanceof Error ? err.message : 'Failed to update invoice status.')
+    } finally {
+      setApplyingStatus(false)
+    }
+  }
+
+  function handleDuplicate(item: InvoiceItemWithPractice) {
+    setCreateFormInitialValues({
+      dni: item.dni,
+      affiliate_number: item.affiliate_number ?? '',
+      service_date: item.service_date ?? '',
+      invoice_practice_id: item.invoice_practice_id,
+      quantity: item.quantity,
+      billed_amount: item.billed_amount,
+      coverage_status: item.coverage_status,
+      documentation_status: item.documentation_status,
+      final_status: item.final_status,
+      notes: item.notes ?? '',
+    })
+    setShowCreateForm(true)
+    setCreateError(null)
+    setTimeout(() => {
+      createFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+  }
+
   async function handleCreate(values: ItemFormState) {
     const practice = practices.find((p) => p.id === values.invoice_practice_id)
     const expectedAmount = practice
@@ -485,6 +621,7 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
       })
       setItems((prev) => [...prev, created])
       setShowCreateForm(false)
+      setCreateFormInitialValues(emptyForm())
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create invoice item.')
     } finally {
@@ -602,8 +739,17 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
 
   const noPractices = !practicesLoading && practices.length === 0
 
+  const STATUS_COLORS: Record<InvoiceStatus, string> = {
+    draft: 'bg-gray-100 text-gray-700',
+    in_review: 'bg-yellow-100 text-yellow-800',
+    validated: 'bg-green-100 text-green-800',
+    observed: 'bg-orange-100 text-orange-800',
+    rejected: 'bg-red-100 text-red-800',
+  }
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-6">
+      {/* Section header */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Invoice Items</h2>
         <div className="flex items-center gap-2">
@@ -619,6 +765,7 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
           {!showCreateForm && (
             <button
               onClick={() => {
+                setCreateFormInitialValues(emptyForm())
                 setShowCreateForm(true)
                 setCreateError(null)
               }}
@@ -634,15 +781,92 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
       {recalcAllError && (
         <p className="text-sm text-red-600 mb-4">{recalcAllError}</p>
       )}
+
+      {/* Summary counters */}
+      {!loading && !loadError && (
+        <div className="mb-6 space-y-3">
+          {/* Item status counts */}
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+            {([
+              { label: 'Total', value: summary.total, color: 'bg-gray-50 border-gray-200 text-gray-700' },
+              { label: 'Approved', value: summary.approved, color: 'bg-green-50 border-green-200 text-green-800' },
+              { label: 'Observed', value: summary.observed, color: 'bg-orange-50 border-orange-200 text-orange-800' },
+              { label: 'Rejected', value: summary.rejected, color: 'bg-red-50 border-red-200 text-red-800' },
+              { label: 'Pending', value: summary.pending, color: 'bg-gray-50 border-gray-200 text-gray-500' },
+            ] as const).map(({ label, value, color }) => (
+              <div key={label} className={`border rounded-md px-3 py-2 text-center ${color}`}>
+                <div className="text-lg font-bold">{value}</div>
+                <div className="text-xs mt-0.5">{label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Issue flags */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="border border-red-200 rounded-md px-3 py-2 text-center bg-red-50">
+              <div className="text-lg font-bold text-red-700">{summary.inactiveCoverage}</div>
+              <div className="text-xs text-red-600 mt-0.5">Inactive coverage</div>
+            </div>
+            <div className="border border-amber-200 rounded-md px-3 py-2 text-center bg-amber-50">
+              <div className="text-lg font-bold text-amber-700">{summary.amountMismatch}</div>
+              <div className="text-xs text-amber-600 mt-0.5">Amount mismatch</div>
+            </div>
+            <div className="border border-gray-200 rounded-md px-3 py-2 text-center bg-gray-50">
+              <div className="text-lg font-bold text-gray-700">{summary.pendingDocs}</div>
+              <div className="text-xs text-gray-500 mt-0.5">Pending docs</div>
+            </div>
+          </div>
+
+          {/* Amount summary */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="border border-gray-200 rounded-md px-3 py-2 bg-gray-50">
+              <div className="text-xs text-gray-500 mb-0.5">Total billed</div>
+              <div className="text-sm font-semibold text-gray-900">${summary.totalBilled.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div className="border border-gray-200 rounded-md px-3 py-2 bg-gray-50">
+              <div className="text-xs text-gray-500 mb-0.5">Total expected</div>
+              <div className="text-sm font-semibold text-gray-900">${summary.totalExpected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div className={`border rounded-md px-3 py-2 ${summary.difference !== 0 ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
+              <div className="text-xs text-gray-500 mb-0.5">Difference</div>
+              <div className={`text-sm font-semibold ${summary.difference !== 0 ? 'text-amber-700' : 'text-gray-900'}`}>
+                {summary.difference >= 0 ? '+' : ''}${summary.difference.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </div>
+          </div>
+
+          {/* Suggested invoice status */}
+          <div className="flex items-center gap-3 border border-gray-200 rounded-md px-4 py-2.5 bg-gray-50">
+            <span className="text-xs text-gray-500 shrink-0">Suggested invoice status:</span>
+            <span className={`inline-flex px-2.5 py-0.5 text-xs font-semibold rounded-full ${STATUS_COLORS[suggestedStatus]}`}>
+              {suggestedStatus}
+            </span>
+            <button
+              onClick={() => void handleApplySuggestedStatus()}
+              disabled={applyingStatus}
+              className="ml-auto px-3 py-1 text-xs border border-gray-300 rounded-md text-gray-700 hover:bg-white disabled:opacity-50 transition-colors"
+            >
+              {applyingStatus ? 'Applying…' : 'Apply suggested status'}
+            </button>
+            {applyStatusError && (
+              <span className="text-xs text-red-600">{applyStatusError}</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Create form */}
       {showCreateForm && (
-        <div className="mb-4">
+        <div className="mb-4" ref={createFormRef}>
           <ItemForm
-            initialValues={emptyForm()}
+            initialValues={createFormInitialValues}
             practices={practices}
+            allItems={items}
             onSubmit={handleCreate}
             onCancel={() => {
               setShowCreateForm(false)
               setCreateError(null)
+              setCreateFormInitialValues(emptyForm())
             }}
             submitLabel="Add Item"
             error={createError}
@@ -671,9 +895,101 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
         </div>
       )}
 
+      {/* Filters */}
+      {!loading && !loadError && items.length > 0 && (
+        <div className="mb-4 space-y-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">DNI</label>
+              <input
+                type="text"
+                value={filterDni}
+                onChange={(e) => setFilterDni(e.target.value)}
+                placeholder="Search DNI…"
+                className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-36"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Final status</label>
+              <select
+                value={filterFinalStatus}
+                onChange={(e) => setFilterFinalStatus(e.target.value as FinalStatus | '')}
+                className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {FINAL_STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{FINAL_LABELS[s]}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Coverage</label>
+              <select
+                value={filterCoverageStatus}
+                onChange={(e) => setFilterCoverageStatus(e.target.value as CoverageStatus | '')}
+                className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {COVERAGE_STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{COVERAGE_LABELS[s]}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Docs</label>
+              <select
+                value={filterDocStatus}
+                onChange={(e) => setFilterDocStatus(e.target.value as DocumentationStatus | '')}
+                className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All</option>
+                {DOCUMENTATION_STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{DOCUMENTATION_LABELS[s]}</option>
+                ))}
+              </select>
+            </div>
+            <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filterMismatchOnly}
+                onChange={(e) => setFilterMismatchOnly(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Mismatch only
+            </label>
+            <label className="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filterDocIssuesOnly}
+                onChange={(e) => setFilterDocIssuesOnly(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Doc issues only
+            </label>
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="px-2.5 py-1 text-xs border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+          {(hasActiveFilters || filteredItems.length !== items.length) && (
+            <p className="text-xs text-gray-500">
+              Showing {filteredItems.length} of {items.length} items
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Item list */}
       {!loading && !loadError && items.length > 0 && (
         <div className="divide-y divide-gray-100">
-          {items.map((item) => {
+          {filteredItems.length === 0 && (
+            <p className="text-sm text-gray-400 py-4 text-center">No items match the current filters.</p>
+          )}
+          {filteredItems.map((item) => {
             const mismatch = hasMismatch(item.billed_amount, item.expected_amount)
             return (
               <div key={item.id} className="py-4 first:pt-0 last:pb-0">
@@ -681,6 +997,7 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
                   <ItemForm
                     initialValues={itemToForm(item)}
                     practices={practices}
+                    allItems={items}
                     onSubmit={(values) => handleUpdate(item.id, values)}
                     onCancel={() => {
                       setEditingId(null)
@@ -740,13 +1057,13 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
 
                       {/* Row 3: status badges */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${COVERAGE_COLORS[item.coverage_status]}`}>
+                        <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${COVERAGE_COLORS[item.coverage_status]}`}>
                           {COVERAGE_LABELS[item.coverage_status]}
                         </span>
-                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${DOCUMENTATION_COLORS[item.documentation_status]}`}>
+                        <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${DOCUMENTATION_COLORS[item.documentation_status]}`}>
                           {DOCUMENTATION_LABELS[item.documentation_status]}
                         </span>
-                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${FINAL_COLORS[item.final_status]}`}>
+                        <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${FINAL_COLORS[item.final_status]}`}>
                           {FINAL_LABELS[item.final_status]}
                         </span>
                       </div>
@@ -766,11 +1083,12 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
                       <ItemDocumentsPanel invoiceItemId={item.id} />
                     </div>
 
-                    <div className="flex gap-2 shrink-0">
+                    {/* Action buttons */}
+                    <div className="flex flex-col gap-1.5 shrink-0 items-end">
                       <button
                         onClick={() => void handleRecalculate(item.id)}
                         disabled={recalcId === item.id || recalcAllRunning}
-                        className="text-sm text-gray-600 hover:underline disabled:opacity-50"
+                        className="text-sm text-gray-600 hover:underline disabled:opacity-50 whitespace-nowrap"
                       >
                         {recalcId === item.id ? 'Recalculating…' : 'Recalculate status'}
                       </button>
@@ -782,6 +1100,12 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
                         className="text-sm text-blue-600 hover:underline"
                       >
                         Edit
+                      </button>
+                      <button
+                        onClick={() => handleDuplicate(item)}
+                        className="text-sm text-indigo-600 hover:underline"
+                      >
+                        Duplicate
                       </button>
                       <button
                         onClick={() => handleDelete(item.id)}

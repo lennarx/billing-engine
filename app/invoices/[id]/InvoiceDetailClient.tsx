@@ -335,7 +335,12 @@ export default function InvoiceDetailClient({ id }: { id: string }) {
       <InvoicePracticesSection invoiceId={id} />
 
       {/* Invoice Items */}
-      <InvoiceItemsSection invoiceId={id} />
+      <InvoiceItemsSection
+        invoiceId={id}
+        onStatusUpdated={(status) =>
+          setInvoice((prev) => prev ? { ...prev, status } : prev)
+        }
+      />
     </div>
   )
 }
