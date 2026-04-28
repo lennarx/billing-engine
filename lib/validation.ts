@@ -110,7 +110,7 @@ function buildDocumentUpdates(documents: ItemDocument[]): DocumentValidationUpda
 
 function isTrasladoInvalid(doc: ItemDocument): boolean {
   if (!doc.origin || !doc.destination) return true
-  const km = doc.kilometers != null ? parseFloat(doc.kilometers) : null
+  const km = doc.kilometers !== null ? parseFloat(doc.kilometers ?? '') : null
   if (km === null || isNaN(km) || km <= 0) return true
   return false
 }

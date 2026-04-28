@@ -6,7 +6,7 @@ export async function getItemDocuments(invoiceItemId: string): Promise<ItemDocum
     .from('item_documents')
     .select('*')
     .eq('invoice_item_id', invoiceItemId)
-    .order('created_at')
+    .order('created_at', { ascending: true })
 
   if (error) throw error
   return (data ?? []) as ItemDocument[]

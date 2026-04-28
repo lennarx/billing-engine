@@ -416,7 +416,9 @@ export default function ItemDocumentsPanel({ invoiceItemId }: ItemDocumentsPanel
                         {doc.destination && <span>To: <span className="font-medium">{doc.destination}</span></span>}
                         {doc.kilometers != null && (
                           <span>
-                            <span className="font-medium">{parseFloat(doc.kilometers).toLocaleString()}</span> km
+                            <span className="font-medium">
+                              {isNaN(parseFloat(doc.kilometers)) ? doc.kilometers : parseFloat(doc.kilometers).toLocaleString()}
+                            </span> km
                           </span>
                         )}
                         {(!doc.origin || !doc.destination || !doc.kilometers || parseFloat(doc.kilometers ?? '0') <= 0) && (
