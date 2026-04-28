@@ -113,9 +113,9 @@ function itemToForm(item: InvoiceItemWithPractice): ItemFormState {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function calcExpectedAmount(quantity: string, nomenclatorValue: string): string {
+function calcExpectedAmount(quantity: string, nomenclator_value: string): string {
   const q = parseFloat(quantity)
-  const v = parseFloat(nomenclatorValue)
+  const v = parseFloat(nomenclator_value)
   if (isNaN(q) || isNaN(v)) return '0'
   return (q * v).toFixed(2)
 }
@@ -495,7 +495,7 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
     } catch (err) {
       const msg =
         err instanceof Error && err.message.includes('foreign key')
-          ? 'Cannot delete: this item has attached documents.'
+          ? 'Cannot delete: this item is referenced by other records.'
           : (err instanceof Error ? err.message : 'Failed to delete invoice item.')
       setDeleteError((prev) => ({ ...prev, [id]: msg }))
     } finally {
@@ -550,7 +550,7 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
 
       {!loading && !loadError && noPractices && (
         <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-400">
-          <p className="text-sm">Add invoice practices before loading invoice items.</p>
+          <p className="text-sm">Add invoice practices before adding invoice items.</p>
         </div>
       )}
 
