@@ -37,15 +37,15 @@ export interface CreateInvoiceItemInput {
   notes: string | null
 }
 
-export async function createInvoiceItem(input: CreateInvoiceItemInput): Promise<InvoiceItem> {
+export async function createInvoiceItem(input: CreateInvoiceItemInput): Promise<InvoiceItemWithPractice> {
   const { data, error } = await supabase
     .from('invoice_items')
     .insert(input)
-    .select()
+    .select('*, invoice_practices(*)')
     .single()
 
   if (error) throw error
-  return data
+  return data as InvoiceItemWithPractice
 }
 
 export interface UpdateInvoiceItemInput {
@@ -65,16 +65,16 @@ export interface UpdateInvoiceItemInput {
 export async function updateInvoiceItem(
   id: string,
   input: UpdateInvoiceItemInput,
-): Promise<InvoiceItem> {
+): Promise<InvoiceItemWithPractice> {
   const { data, error } = await supabase
     .from('invoice_items')
     .update(input)
     .eq('id', id)
-    .select()
+    .select('*, invoice_practices(*)')
     .single()
 
   if (error) throw error
-  return data
+  return data as InvoiceItemWithPractice
 }
 
 export async function deleteInvoiceItem(id: string): Promise<void> {

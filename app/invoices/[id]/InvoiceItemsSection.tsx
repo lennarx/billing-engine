@@ -401,21 +401,55 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
   const [deleteError, setDeleteError] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    Promise.all([
-      getInvoicePractices(invoiceId),
-      getInvoiceItems(invoiceId),
-    ])
-      .then(([fetchedPractices, fetchedItems]) => {
+    let cancelled = false
+
+    const loadData = async (background = false) => {
+      if (!background) {
+        setLoadError(null)
+        setPracticesLoading(true)
+        setLoading(true)
+      }
+
+      try {
+        const [fetchedPractices, fetchedItems] = await Promise.all([
+          getInvoicePractices(invoiceId),
+          getInvoiceItems(invoiceId),
+        ])
+
+        if (cancelled) return
+
         setPractices(fetchedPractices)
         setItems(fetchedItems)
-      })
-      .catch((err) =>
-        setLoadError(err instanceof Error ? err.message : 'Failed to load invoice items.'),
-      )
-      .finally(() => {
+        setLoadError(null)
+      } catch (err) {
+        if (cancelled) return
+        if (!background) {
+          setLoadError(err instanceof Error ? err.message : 'Failed to load invoice items.')
+        }
+      } finally {
+        if (cancelled || background) return
         setPracticesLoading(false)
         setLoading(false)
-      })
+      }
+    }
+
+    const refreshOnFocus = () => void loadData(true)
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === 'visible') void loadData(true)
+    }
+
+    void loadData()
+
+    window.addEventListener('focus', refreshOnFocus)
+    document.addEventListener('visibilitychange', refreshOnVisibility)
+    const refreshInterval = window.setInterval(() => void loadData(true), 30_000)
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', refreshOnFocus)
+      document.removeEventListener('visibilitychange', refreshOnVisibility)
+      window.clearInterval(refreshInterval)
+    }
   }, [invoiceId])
 
   async function handleCreate(values: ItemFormState) {
@@ -427,7 +461,7 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
     setCreateSaving(true)
     setCreateError(null)
     try {
-      await createInvoiceItem({
+      const created = await createInvoiceItem({
         invoice_id: invoiceId,
         invoice_practice_id: values.invoice_practice_id,
         dni: values.dni.trim(),
@@ -441,9 +475,7 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
         final_status: values.final_status,
         notes: values.notes.trim() || null,
       })
-      // Re-fetch to get the joined practice data
-      const updated = await getInvoiceItems(invoiceId)
-      setItems(updated)
+      setItems((prev) => [...prev, created])
       setShowCreateForm(false)
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create invoice item.')
@@ -461,7 +493,7 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
     setEditSaving(true)
     setEditError(null)
     try {
-      await updateInvoiceItem(id, {
+      const updated = await updateInvoiceItem(id, {
         invoice_practice_id: values.invoice_practice_id,
         dni: values.dni.trim(),
         affiliate_number: values.affiliate_number.trim() || null,
@@ -474,9 +506,7 @@ export default function InvoiceItemsSection({ invoiceId }: { invoiceId: string }
         final_status: values.final_status,
         notes: values.notes.trim() || null,
       })
-      // Re-fetch to get the joined practice data
-      const updated = await getInvoiceItems(invoiceId)
-      setItems(updated)
+      setItems((prev) => prev.map((item) => (item.id === id ? updated : item)))
       setEditingId(null)
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Failed to update invoice item.')
