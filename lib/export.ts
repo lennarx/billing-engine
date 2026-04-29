@@ -6,10 +6,14 @@ import { ItemDocument } from './types'
 // Cell helpers
 // ---------------------------------------------------------------------------
 
-/** Wrap a value in double-quotes and escape any internal double-quotes. */
+/**
+ * Wrap a value in double-quotes, escape internal double-quotes, and neutralize
+ * spreadsheet formula injection (values starting with =, +, -, or @).
+ */
 export function escapeCell(value: string | null | undefined): string {
   const str = value ?? ''
-  return `"${str.replace(/"/g, '""')}"`
+  const safe = /^[=+\-@]/.test(str.trimStart()) ? `'${str}` : str
+  return `"${safe.replace(/"/g, '""')}"`
 }
 
 /**
