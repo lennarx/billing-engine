@@ -153,3 +153,46 @@ Validation only runs when the user clicks **Recalculate status** (per item) or *
 See [docs/context.md](docs/context.md) and [docs/data-model.md](docs/data-model.md) for full documentation.
 
 **Key rule:** A nomenclator value belongs to a *practice within an invoice*, not globally. Each practice inside an invoice has its own value. Many affiliate items can reference the same practice.
+
+## Export
+
+The invoice detail page includes an **Export CSV** button in the Invoice Items section.
+
+### How to use
+- Click **Export CSV** on any invoice detail page.
+- The button is disabled when the invoice has no items (a "No invoice items to export." hint is shown).
+- The file downloads automatically to your browser's default downloads folder.
+
+### File format
+- UTF-8 CSV with BOM — opens correctly in Microsoft Excel (accented characters preserved).
+- One row per invoice item.
+- Filename pattern: `billing-engine-{invoice_number}-{yyyy-mm-dd}.csv`
+
+### Exported columns
+
+| Column | Description |
+|---|---|
+| `provider_name` | Name of the provider |
+| `invoice_number` | Invoice identifier |
+| `invoice_date` | Invoice date |
+| `invoice_status` | Current invoice status |
+| `invoice_total_amount` | Declared total amount |
+| `dni` | Patient DNI |
+| `affiliate_number` | Affiliate number (if recorded) |
+| `service_date` | Date the service was performed |
+| `practice_code` | Practice code (if set) |
+| `practice_name` | Practice name |
+| `unit_type` | Unit type (`fixed`, `unit`, `km`) |
+| `quantity` | Quantity |
+| `nomenclator_value` | Nomenclator value for this practice on this invoice |
+| `billed_amount` | Amount billed by the provider |
+| `expected_amount` | Expected amount (`quantity × nomenclator_value`) |
+| `amount_difference` | `billed_amount − expected_amount` |
+| `amount_matches` | `true` if amounts match, `false` otherwise |
+| `coverage_status` | Coverage status (`pending`, `active`, `inactive`) |
+| `documentation_status` | Documentation status (`pending`, `ok`, `observed`, `not_required`) |
+| `final_status` | Final validation status (`pending`, `approved`, `observed`, `rejected`) |
+| `notes` | Item notes |
+| `documents_count` | Number of supporting documents attached |
+| `document_types` | Comma-separated document types |
+| `document_validation_statuses` | Comma-separated document validation statuses |

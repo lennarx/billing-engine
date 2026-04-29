@@ -337,6 +337,7 @@ export default function InvoiceDetailClient({ id }: { id: string }) {
       {/* Invoice Items */}
       <InvoiceItemsSection
         invoiceId={id}
+        invoice={invoice}
         onStatusUpdated={(status) =>
           setInvoice((prev) => prev ? { ...prev, status } : prev)
         }
