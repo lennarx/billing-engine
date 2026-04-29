@@ -11,7 +11,7 @@ import {
 import { getInvoicePractices } from '@/lib/invoice-practices'
 import { getItemDocuments, updateItemDocument } from '@/lib/item-documents'
 import { validateInvoiceItem } from '@/lib/validation'
-import { updateInvoice } from '@/lib/invoices'
+import { updateInvoice, InvoiceWithProvider } from '@/lib/invoices'
 import {
   InvoicePractice,
   InvoiceStatus,
@@ -20,6 +20,7 @@ import {
   FinalStatus,
 } from '@/lib/types'
 import ItemDocumentsPanel from './ItemDocumentsPanel'
+import ExportCsvButton from './ExportCsvButton'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -434,9 +435,11 @@ function ItemForm({
 
 export default function InvoiceItemsSection({
   invoiceId,
+  invoice,
   onStatusUpdated,
 }: {
   invoiceId: string
+  invoice: InvoiceWithProvider
   onStatusUpdated?: (status: InvoiceStatus) => void
 }) {
   const [practices, setPractices] = useState<InvoicePractice[]>([])
@@ -773,6 +776,7 @@ export default function InvoiceItemsSection({
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Invoice Items</h2>
         <div className="flex items-center gap-2">
+          <ExportCsvButton invoice={invoice} items={items} />
           {items.length > 0 && (
             <button
               onClick={() => void handleRecalculateAll()}
